@@ -19,8 +19,6 @@ const PORT = 3000;
 
 app.use(helmet());
 
-app.use(errorHandler);
-
 mongoose.connect(MONGODB_URI);
 
 app.use(express.json());
@@ -48,5 +46,7 @@ app.use(expressWinston.errorLogger({
 }));
 
 app.use(errors());
+
+app.use(errorHandler);
 
 app.listen(PORT);

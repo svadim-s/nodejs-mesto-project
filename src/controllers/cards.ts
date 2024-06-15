@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import Card from '../models/card';
 import BadRequestError from '../Errors/BadRequestError';
 import NotFoundError from '../Errors/NotFoundError';
+import ForbiddenError from '../Errors/ForbiddenError';
 
 export const getCards = (req: Request, res: Response, next: NextFunction) => Card.find({})
   .then((cards) => res.send(cards))
@@ -24,14 +25,20 @@ export const createCard = (req: Request, res: Response, next: NextFunction) => {
 export const deleteCard = (req: Request, res: Response, next: NextFunction) => {
   const { cardId } = req.params;
 
-  return Card.findByIdAndRemove({ _id: cardId, owner: res.locals.user?._id })
+  return Card.findById(cardId)
     .orFail(() => new NotFoundError('Карточка с указанным _id не найдена'))
+    .then((card) => {
+      if (card.owner.valueOf() !== res.locals.user._id) {
+        throw new ForbiddenError('Вы не можете удалить эту карточку');
+      }
+
+      return card.deleteOne();
+    })
     .then(() => res.send({ message: 'Card deleted' }))
     .catch((err) => {
       if (err.name === 'CastError') {
         return next(new BadRequestError('Некорректный id карточки'));
       }
-
       return next(err);
     });
 };

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import ConflictError from '../Errors/ConflictError';
 import BadRequestError from '../Errors/BadRequestError';
 import User from '../models/user';
 import NotFoundError from '../Errors/NotFoundError';
@@ -56,10 +57,14 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
     email,
     password: hashPassword,
   })
-    .then((user) => res.status(201).send({ data: user }))
+    .then((user) => res.status(201).send({ data: user.toJSON() }))
     .catch((err) => {
       if (err.name === 'ValidationError') {
         return next(new BadRequestError('Переданы некорректные данные при создании пользователя.'));
+      }
+
+      if (err instanceof Error && err.message.includes('E11000')) {
+        return next(new ConflictError('Пользователь с данным email уже существует'));
       }
 
       return next(err);
@@ -70,7 +75,7 @@ export const updateUser = (req: Request, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
 
   return User.findOneAndUpdate(
-    req.body.user?._id,
+    { _id: res.locals.user._id },
     { name, about },
     { new: true, runValidators: true },
   )
@@ -91,7 +96,7 @@ export const updateAvatar = (req: Request, res: Response, next: NextFunction) =>
   const { avatar } = req.body;
 
   return User.findOneAndUpdate(
-    req.body.user?._id,
+    { _id: res.locals.user._id },
     { avatar },
     { new: true, runValidators: true },
   )
@@ -124,12 +129,6 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
           }
 
           const token = jwt.sign({ _id: user._id }, 'secret-key', { expiresIn: '7d' });
-
-          res.cookie('jwt', token, {
-            maxAge: 3600000 * 24 * 7,
-            httpOnly: true,
-            secure: true,
-          });
 
           return res.send({ token });
         });
