@@ -1,9 +1,16 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import mongoose from 'mongoose';
 import helmet from 'helmet';
+import expressWinston from 'express-winston';
+import { errors } from 'celebrate';
+import errorHandler from './Errors/errorHandler';
 import userRoutes from './routes/users';
 import cardRoutes from './routes/cards';
-import { ERROR_CODE_BAD_REQUEST } from './controllers/utils/ErrorTypes';
+import { createUser, login } from './controllers/users';
+import auth from './middlewares/auth';
+import { requestLogger, errorLogger } from './middlewares/logger';
+import { validateUserCreation, validateUserLogin } from './middlewares/validators/userValidator';
+import NotFoundError from './Errors/NotFoundError';
 
 const MONGODB_URI = 'mongodb://localhost:27017/mestodb';
 
@@ -12,22 +19,34 @@ const PORT = 3000;
 
 app.use(helmet());
 
+app.use(errorHandler);
+
 mongoose.connect(MONGODB_URI);
 
 app.use(express.json());
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-  req.body.user = {
-    _id: '66681d1427311eefb813ed4e',
-  };
+app.use(expressWinston.logger({
+  winstonInstance: requestLogger,
+  meta: true,
+  msg: 'HTTP {{req.method}} {{req.url}}',
+  expressFormat: true,
+  colorize: false,
+}));
 
-  next();
-});
+app.use('/users', auth, userRoutes);
+app.use('/cards', auth, cardRoutes);
 
-app.use('/users', userRoutes);
-app.use('/cards', cardRoutes);
+app.post('/signin', validateUserLogin, login);
+app.post('/signup', validateUserCreation, createUser);
+
 app.use((req, res, next) => {
-  next(res.status(ERROR_CODE_BAD_REQUEST).send({ message: 'Запрашиваемый ресурс не найден' }));
+  next(new NotFoundError('Запрашиваемый ресурс не найден'));
 });
+
+app.use(expressWinston.errorLogger({
+  winstonInstance: errorLogger,
+}));
+
+app.use(errors());
 
 app.listen(PORT);
